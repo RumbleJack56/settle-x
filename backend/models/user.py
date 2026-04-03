@@ -10,6 +10,7 @@ class User(Base):
     mobile_number = Column(String, unique=True, index=True, nullable=False)
     business_name = Column(String, nullable=True)
     gstin = Column(String, nullable=True)
+    transaction_pin_hash = Column(String, nullable=True)
 
 class OtpSession(Base):
     __tablename__ = "otp_sessions"

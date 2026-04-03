@@ -1,91 +1,113 @@
 "use client";
-
 import { useState } from "react";
-import { Tv } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Tv, Play } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-export default function DTHRechargePage() {
-  const [operator, setOperator] = useState<string | null>(null);
+export default function DthRecharge() {
+    const { data: session } = useSession();
+    const router = useRouter();
+    const [dthNumber, setDthNumber] = useState("");
+    const [amount, setAmount] = useState("");
+    const [provider, setProvider] = useState("Tata Sky");
+    const [loading, setLoading] = useState(false);
 
-  const operators = ['Tata Play', 'Airtel Digital TV', 'Sun Direct', 'Dish TV', 'D2H'];
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000/api/v1";
+            const res = await fetch(`${apiBase}/checkout/intent`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${session?.user?.api_token}`
+                },
+                body: JSON.stringify({
+                    amount_paise: Math.floor(parseFloat(amount) * 100),
+                    description: `DTH Recharge: ${provider} (${dthNumber})`,
+                    target_type: "DTH_RECHARGE",
+                    transaction_metadata: { provider, dthNumber }
+                })
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                router.push(`/checkout/${data.token}`);
+            } else {
+                alert("Failed to initialize checkout intent.");
+                setLoading(false);
+            }
+        } catch (e) {
+            console.error(e);
+            setLoading(false);
+        }
+    };
 
-  return (
-    <div className="w-full bg-paytm-bg min-h-screen pb-20">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-6">
-        
-        {/* Header Section */}
-        <div className="mb-4 flex items-center gap-3">
-          <div className="bg-white p-2 rounded-xl shadow-sm border border-paytm-border inline-flex">
-            <Tv className="text-paytm-cyan w-8 h-8" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">DTH Recharge</h1>
-        </div>
-
-        {/* Main Card */}
-        <div className="bg-white rounded-3xl p-8 shadow-sm border border-paytm-border">
-          
-          {/* Operator Grid */}
-          <div className="mb-8">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Select your Operator</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-               {operators.map((op) => (
-                 <div 
-                   key={op} 
-                   onClick={() => setOperator(op)}
-                   className={`border rounded-xl p-4 text-center cursor-pointer transition-all duration-200 group ${
-                     operator === op 
-                       ? 'border-paytm-cyan bg-[#e0f4fc] shadow-sm transform scale-[1.02]' 
-                       : 'border-gray-200 hover:border-paytm-cyan hover:bg-[#EBF7FF]'
-                   }`}
-                 >
-                    <div className={`w-12 h-12 rounded-full mx-auto mb-2 flex items-center justify-center transition-colors ${operator === op ? 'bg-white shadow-sm' : 'bg-gray-50 group-hover:bg-white'}`}>
-                      <Tv className={`${operator === op ? 'text-paytm-cyan' : 'text-gray-400 group-hover:text-paytm-cyan'} w-6 h-6 transition-colors`} />
+    return (
+        <div className="max-w-xl mx-auto py-12 px-4">
+            <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-4 mb-8 pb-6 border-b border-gray-100">
+                    <div className="bg-blue-50 p-4 rounded-2xl text-blue-600">
+                        <Tv size={32} />
                     </div>
-                    <span className={`text-sm font-bold transition-colors ${operator === op ? 'text-paytm-navy' : 'text-gray-700'}`}>{op}</span>
-                 </div>
-               ))}
-            </div>
-          </div>
-
-          {operator && (
-            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
-              <div className="border-t border-gray-100 pt-8 mt-2" />
-
-              {/* Form */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-                
-                <div className="relative">
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">{operator} Subscriber ID</label>
-                  <input 
-                    type="text" 
-                    placeholder={`Enter ${operator} ID`}
-                    className="w-full text-lg sm:text-xl font-bold text-gray-900 border-b-2 border-gray-200 focus:border-paytm-cyan outline-none py-2 transition-colors placeholder:font-normal placeholder:text-gray-400"
-                  />
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900">DTH Recharge</h1>
+                        <p className="text-gray-500 font-medium text-sm">Instantly recharge your set-top box directly from Ledger.</p>
+                    </div>
                 </div>
 
-                <div className="relative">
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Amount</label>
-                  <div className="flex items-center border-b-2 border-gray-200 focus-within:border-paytm-cyan transition-colors">
-                    <span className="text-xl font-bold text-gray-400 mr-2">₹</span>
-                    <input 
-                      type="number" 
-                      placeholder="0" 
-                      className="w-full text-lg sm:text-xl font-bold text-gray-900 outline-none py-2 placeholder:font-normal placeholder:text-gray-400"
-                    />
-                  </div>
-                </div>
-
-              </div>
-
-              <div className="mt-8 flex justify-end">
-                <button className="bg-[#00baec] hover:bg-[#00a8d6] transition-colors text-white font-bold py-3.5 px-8 rounded-xl shadow-md text-lg active:scale-95 w-full md:w-auto">
-                  Proceed to Pay
-                </button>
-              </div>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Select Operator</label>
+                        <select 
+                            value={provider} 
+                            onChange={e => setProvider(e.target.value)}
+                            className="w-full border border-gray-300 rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-[#00baf2] outline-none font-medium"
+                        >
+                            <option>Tata Sky</option>
+                            <option>Airtel Digital TV</option>
+                            <option>Dish TV</option>
+                            <option>Sun Direct</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Subscriber ID</label>
+                        <input 
+                            type="text" 
+                            value={dthNumber} 
+                            onChange={e => setDthNumber(e.target.value)}
+                            placeholder="10-digit Customer ID"
+                            className="w-full border border-gray-300 rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-[#00baf2] outline-none font-medium"
+                            required
+                        />
+                    </div>
+                    
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
+                        <div className="relative">
+                            <span className="absolute left-4 top-3.5 font-bold text-gray-500">₹</span>
+                            <input 
+                                type="number" 
+                                value={amount} 
+                                onChange={e => setAmount(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full border border-gray-300 rounded-xl pl-9 pr-4 py-3.5 focus:ring-2 focus:ring-[#00baf2] outline-none font-bold text-lg"
+                                required
+                            />
+                        </div>
+                    </div>
+                    
+                    <button 
+                        type="submit" 
+                        disabled={loading || !amount}
+                        className="w-full bg-[#002970] text-white font-bold py-4 rounded-xl hover:bg-blue-900 transition-colors flex justify-center items-center gap-2 shadow-lg shadow-blue-900/10 active:scale-[0.99] disabled:opacity-50"
+                    >
+                        {loading ? "Initializing Secure Checkout..." : "Proceed to Checkout"} <Play size={16} />
+                    </button>
+                </form>
             </div>
-          )}
-
         </div>
-      </div>
-    </div>
-  );
+    );
 }

@@ -1,10 +1,51 @@
 "use client";
 
 import { useState } from "react";
-import { Smartphone } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Smartphone, Play } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function MobileRechargePage() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  
   const [type, setType] = useState<"prepaid" | "postpaid">("prepaid");
+  const [mobileNumber, setMobileNumber] = useState("");
+  const [operator, setOperator] = useState("");
+  const [amount, setAmount] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setLoading(true);
+      try {
+          const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000/api/v1";
+          const res = await fetch(`${apiBase}/checkout/intent`, {
+              method: "POST",
+              headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${session?.user?.api_token}`
+              },
+              body: JSON.stringify({
+                  amount_paise: Math.floor(parseFloat(amount) * 100),
+                  description: `${type.charAt(0).toUpperCase() + type.slice(1)} Mobile Recharge: ${operator} (${mobileNumber})`,
+                  target_type: "MOBILE_RECHARGE",
+                  transaction_metadata: { operator, mobileNumber, type }
+              })
+          });
+          
+          if (res.ok) {
+              const data = await res.json();
+              router.push(`/checkout/${data.token}`);
+          } else {
+              alert("Failed to initialize secure checkout intent.");
+          }
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setLoading(false);
+      }
+  };
 
   return (
     <div className="w-full bg-paytm-bg min-h-screen pb-20">
@@ -15,11 +56,11 @@ export default function MobileRechargePage() {
           <div className="bg-white p-2 rounded-xl shadow-sm border border-paytm-border inline-flex">
             <Smartphone className="text-paytm-cyan w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Prepaid Mobile Recharge</h1>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Mobile Recharge</h1>
         </div>
 
         {/* Main Card */}
-        <div className="bg-white rounded-3xl p-8 shadow-sm border border-paytm-border">
+        <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-8 shadow-sm border border-paytm-border">
           
           {/* Radio Options */}
           <div className="flex gap-8 mb-8 pb-4 border-b border-gray-100">
@@ -40,26 +81,33 @@ export default function MobileRechargePage() {
           </div>
 
           {/* Form */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
-            
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end mb-8">
             <div className="relative">
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Mobile Number</label>
               <input 
                 type="tel" 
+                value={mobileNumber}
+                onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ''))}
                 placeholder="Enter Mobile Number" 
                 className="w-full text-lg sm:text-xl font-bold text-gray-900 border-b-2 border-gray-200 focus:border-paytm-cyan outline-none py-2 transition-colors placeholder:font-normal placeholder:text-gray-400"
                 maxLength={10}
+                required
               />
             </div>
 
             <div className="relative">
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Operator / Circle</label>
-              <select className="w-full text-lg sm:text-xl font-bold text-gray-900 border-b-2 border-gray-200 focus:border-paytm-cyan outline-none py-2 transition-colors bg-white">
+              <select 
+                 value={operator}
+                 onChange={(e) => setOperator(e.target.value)}
+                 className="w-full text-lg sm:text-xl font-bold text-gray-900 border-b-2 border-gray-200 focus:border-paytm-cyan outline-none py-2 transition-colors bg-white"
+                 required
+               >
                 <option value="">Select Operator</option>
-                <option value="airtel">Airtel</option>
-                <option value="jio">Jio</option>
-                <option value="vi">Vi (Vodafone Idea)</option>
-                <option value="bsnl">BSNL</option>
+                <option value="Airtel">Airtel</option>
+                <option value="Jio">Jio</option>
+                <option value="Vi">Vi (Vodafone Idea)</option>
+                <option value="BSNL">BSNL</option>
               </select>
             </div>
 
@@ -69,21 +117,28 @@ export default function MobileRechargePage() {
                 <span className="text-xl font-bold text-gray-400 mr-2">₹</span>
                 <input 
                   type="number" 
-                  placeholder="0" 
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0.00" 
+                  step="0.01"
+                  min="1"
                   className="w-full text-lg sm:text-xl font-bold text-gray-900 outline-none py-2 placeholder:font-normal placeholder:text-gray-400"
+                  required
                 />
               </div>
             </div>
-
           </div>
 
           <div className="mt-8 flex justify-end">
-            <button className="bg-[#00baec] hover:bg-[#00a8d6] transition-colors text-white font-bold py-3.5 px-8 rounded-xl shadow-md text-lg active:scale-95 w-full md:w-auto">
-              Proceed to Recharge
+            <button 
+                type="submit" 
+                disabled={loading || !mobileNumber || !operator || !amount}
+                className="bg-[#00baec] hover:bg-[#00a8d6] transition-colors text-white font-bold py-3.5 px-8 rounded-xl shadow-md text-lg active:scale-95 w-full md:w-auto flex items-center justify-center gap-2 disabled:opacity-50"
+             >
+              {loading ? "Securing API..." : "Proceed to Checkout"}
             </button>
           </div>
-
-        </div>
+        </form>
       </div>
     </div>
   );

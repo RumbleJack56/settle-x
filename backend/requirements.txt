@@ -6,3 +6,6 @@ requests
 twilio
 pydantic
 pydantic-settings
+
+passlib
+bcrypt

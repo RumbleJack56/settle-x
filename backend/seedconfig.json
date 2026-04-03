@@ -1,0 +1,28 @@
+{
+  "accounts": [
+    {
+      "mobile_number": "9999999991",
+      "business_name": "Alice Retail",
+      "pin": "1234",
+      "starting_balance_paise": 1500000
+    },
+    {
+      "mobile_number": "9999999992",
+      "business_name": "Bob Wholesale",
+      "pin": "1234",
+      "starting_balance_paise": 5500000
+    },
+    {
+      "mobile_number": "9999999993",
+      "business_name": "Charlie Logistics",
+      "pin": "1234",
+      "starting_balance_paise": 250000
+    },
+    {
+      "mobile_number": "7503839579",
+      "business_name": "Ujjwal Kakar",
+      "pin": "1232",
+      "starting_balance_paise": 250000
+    }
+  ]
+}
