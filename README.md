@@ -1,5 +1,3 @@
-<![CDATA[<div align="center">
-
 # 💰 SettleX
 
 **MSME Financial Intelligence Platform**
@@ -12,7 +10,7 @@ A Paytm-style fintech web app giving Micro, Small & Medium Enterprises a unified
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss)](https://tailwindcss.com/)
 [![License](https://img.shields.io/badge/License-Private-red)]()
 
-</div>
+
 
 ---
 
