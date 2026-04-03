@@ -9,6 +9,7 @@ from api.payments import router as payments_router
 from api.checkout import router as checkout_router
 from api.admin import router as admin_router
 from api.bonds import router as bonds_router
+from api.compliance import router as compliance_router
 
 # Import all models to ensure SQLAlchemy binds their schema definitions natively
 from models import *
@@ -34,6 +35,7 @@ app.include_router(payments_router, prefix=f"{settings.API_V1_STR}/payments", ta
 app.include_router(checkout_router, prefix=f"{settings.API_V1_STR}/checkout", tags=["Tokenized Checkout"])
 app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["SettleX Core Admin"])
 app.include_router(bonds_router, prefix=f"{settings.API_V1_STR}/bonds", tags=["Treasury Bonds Framework"])
+app.include_router(compliance_router, prefix=f"{settings.API_V1_STR}/compliance", tags=["GST Compliance"])
 
 @app.get("/")
 def read_root():
