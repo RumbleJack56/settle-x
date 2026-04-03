@@ -1,17 +1,27 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Loader2, ShieldCheck, CheckCircle2 } from "lucide-react";
 import PinModal from "../../components/PinModal";
 import Link from "next/link";
+import { parseApiError } from "@/lib/api";
+import { formatTransactionType, getMetadataRows } from "@/lib/transactionTypes";
+
+type CheckoutIntent = {
+    amount_paise: number;
+    amount_inr: number;
+    description: string;
+    target_type: string;
+    metadata: Record<string, unknown>;
+    status: string;
+};
 
 export default function CheckoutPage() {
     const params = useParams();
-    const router = useRouter();
     const { data: session, status } = useSession();
     
-    const [intent, setIntent] = useState<any>(null);
+    const [intent, setIntent] = useState<CheckoutIntent | null>(null);
     const [error, setError] = useState("");
     const [pinModalOpen, setPinModalOpen] = useState(false);
     const [loadingTx, setLoadingTx] = useState(false);
@@ -26,8 +36,8 @@ export default function CheckoutPage() {
             headers: { "Authorization": `Bearer ${session?.user?.api_token}` }
         })
         .then(res => res.json().then(data => ({ status: res.status, data })))
-        .then(({ status, data }) => {
-            if (status !== 200) setError(data.detail || "Intent verification failed.");
+        .then(({ status, data }: { status: number; data: CheckoutIntent }) => {
+            if (status !== 200) setError(parseApiError(data, "Intent verification failed."));
             else setIntent(data);
         })
         .catch(() => setError("Network error resolving Intent token."));
@@ -50,10 +60,10 @@ export default function CheckoutPage() {
                 setSuccess(true);
                 setPinModalOpen(false);
             } else {
-                setError(data.detail);
+                setError(parseApiError(data, "Failed to execute intent payment."));
                 setPinModalOpen(false);
             }
-        } catch (e) {
+        } catch {
             setError("Fatal network execution block.");
         } finally {
             setLoadingTx(false);
@@ -92,7 +102,7 @@ export default function CheckoutPage() {
                         <ShieldCheck size={32} className="mx-auto mb-4 text-[#00baf2]" />
                         <h2 className="text-sm font-semibold tracking-wider text-[#00baf2] uppercase mb-1">Secure Checkout</h2>
                         <h1 className="text-4xl font-black mb-2">₹{intent.amount_inr.toLocaleString('en-IN', {minimumFractionDigits:2})}</h1>
-                        <p className="text-white/80 font-medium">To: {intent.target_type} Processing</p>
+                        <p className="text-white/80 font-medium">To: {formatTransactionType(intent.target_type)} Processing</p>
                     </div>
                 </div>
                 
@@ -103,10 +113,10 @@ export default function CheckoutPage() {
                         
                         {intent.metadata && Object.keys(intent.metadata).length > 0 && (
                             <div className="mt-4 pt-4 border-t border-gray-200 gap-y-2 flex flex-col">
-                                {Object.entries(intent.metadata).map(([key, val]) => (
+                                {getMetadataRows(intent.target_type, intent.metadata).map(({ key, label, value }) => (
                                     <div key={key} className="flex justify-between text-sm">
-                                        <span className="text-gray-500 font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                        <span className="font-semibold text-gray-900">{String(val)}</span>
+                                        <span className="text-gray-500 font-medium">{label}</span>
+                                        <span className="font-semibold text-gray-900">{value}</span>
                                     </div>
                                 ))}
                             </div>

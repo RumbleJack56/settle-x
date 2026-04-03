@@ -1,15 +1,18 @@
 import json
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 
 from database.session import get_db
 from models.user import User
-from models.ledger import LedgerAccount, AccountType, Transaction, LedgerEntry, EntryDirection, TransactionStatus, PaymentIntent, IntentStatus
+from models.ledger import LedgerAccount, AccountType, EntryDirection, PaymentIntent, IntentStatus
 from schemas.checkout import IntentCreate, IntentExecute
 from api.deps import get_current_user
 from api.payments import get_wallet, calculate_balance
+from core.http import api_error
+from core.transaction_types import resolve_intent_transaction_type, validate_intent_metadata
+from core.settlement import SettlementEntry, execute_settlement_transaction
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -42,7 +45,8 @@ def get_event_account(db: Session, target_type: str) -> LedgerAccount:
 @router.post("/intent")
 def create_intent(payload: IntentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if payload.amount_paise <= 0:
-         raise HTTPException(status_code=400, detail="Invalid transfer amount.")
+         api_error(400, "INVALID_AMOUNT", "Invalid transfer amount.")
+    validate_intent_metadata(payload.target_type, payload.transaction_metadata)
          
     raw_metadata = json.dumps(payload.transaction_metadata) if payload.transaction_metadata else None
     
@@ -64,7 +68,9 @@ def create_intent(payload: IntentCreate, db: Session = Depends(get_db), current_
 def get_intent(token: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     intent = db.query(PaymentIntent).filter(PaymentIntent.token == token).first()
     if not intent:
-        raise HTTPException(status_code=404, detail="Payment Intent not found")
+        api_error(404, "INTENT_NOT_FOUND", "Payment Intent not found.")
+    if intent.user_id != current_user.id:
+        api_error(403, "UNAUTHORIZED_INTENT_ACCESS", "Unauthorized token access.")
         
     return {
         "amount_paise": intent.amount_paise,
@@ -80,70 +86,78 @@ def execute_intent(payload: IntentExecute, db: Session = Depends(get_db), curren
     # 1. Fetch Intent
     intent = db.query(PaymentIntent).filter(PaymentIntent.token == payload.token).first()
     if not intent:
-        raise HTTPException(status_code=404, detail="Intent not found")
+        api_error(404, "INTENT_NOT_FOUND", "Intent not found.")
         
     if intent.status == IntentStatus.COMPLETED:
         return {"message": "Intent already executed successfully", "status": intent.status}
         
     if intent.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Unauthorized token access")
-        
+        api_error(403, "UNAUTHORIZED_INTENT_ACCESS", "Unauthorized token access.")
+
     # 2. PIN Validation
     if not current_user.transaction_pin_hash:
-        raise HTTPException(status_code=403, detail="PIN_NOT_SET")
+        api_error(403, "PIN_NOT_SET", "Transaction PIN is not set.")
     if not pwd_context.verify(payload.pin, current_user.transaction_pin_hash):
-        raise HTTPException(status_code=403, detail="Invalid PIN")
+        api_error(403, "INVALID_PIN", "Invalid PIN.")
         
     # 3. Balance Verification
     sender_wallet = get_wallet(db, current_user.id)
     sender_balance = calculate_balance(db, sender_wallet.id)
     
     if sender_balance < intent.amount_paise:
-        raise HTTPException(status_code=400, detail="Insufficient Wallet Balance")
+        api_error(400, "INSUFFICIENT_BALANCE", "Insufficient Wallet Balance.")
         
     # 4. Target Event Account
     event_account = get_event_account(db, intent.target_type)
     
     # 5. Execute Double Entry Ledger Logic
+    metadata = json.loads(intent.transaction_metadata) if intent.transaction_metadata else {}
+    txn_type = resolve_intent_transaction_type(intent.target_type)
     try:
-        txn = Transaction(
-            user_id=current_user.id, 
-            idempotency_key=intent.token, # Lock double processing inherently!
+        result = execute_settlement_transaction(
+            db=db,
+            user_id=current_user.id,
+            idempotency_key=intent.token,
             description=intent.description,
+            transaction_type=txn_type,
             ai_category=intent.target_type,
-            status=TransactionStatus.COMPLETED
+            metadata={"target_type": intent.target_type, **metadata},
+            entries=[
+                SettlementEntry(
+                    account_id=sender_wallet.id,
+                    direction=EntryDirection.CREDIT,
+                    amount=intent.amount_paise
+                ),
+                SettlementEntry(
+                    account_id=event_account.id,
+                    direction=EntryDirection.DEBIT,
+                    amount=intent.amount_paise
+                ),
+            ],
         )
-        db.add(txn)
-        db.flush() 
-        
-        # We decrease sender asset via CREDIT
-        credit_entry = LedgerEntry(
-            transaction_id=txn.id,
-            account_id=sender_wallet.id,
-            direction=EntryDirection.CREDIT,
-            amount=intent.amount_paise
-        )
-        
-        # We increase utility revenue via DEBIT (Revenue is natively credited, but in generalized simplified parsing, we treat it as an offset. Let's strictly debit revenue so equation: Assets - Liabilities + Expenses - Equity - Revenue = 0... wait. Revenue account balances rise on CREDIT. To offset an Asset CREDIT, the other side must be a DEBIT. A Debit to a REVENUE account represents a decrease. Wait! If Asset decreases (CREDIT), then Equity/Liability/Revenue must decrease (DEBIT) or Asset must increase (DEBIT). It's balanced!
-        debit_entry = LedgerEntry(
-            transaction_id=txn.id,
-            account_id=event_account.id,
-            direction=EntryDirection.DEBIT,
-            amount=intent.amount_paise
-        )
-        db.add(credit_entry)
-        db.add(debit_entry)
+        if result.idempotent_replay:
+            intent.status = IntentStatus.COMPLETED
+            db.add(intent)
+            db.commit()
+            return {
+                "message": "Intent already executed successfully",
+                "status": IntentStatus.COMPLETED,
+                "transaction_id": result.transaction.id,
+                "amount_inr": intent.amount_paise / 100
+            }
         
         # Mark intent complete safely
         intent.status = IntentStatus.COMPLETED
-        
+        db.add(intent)
         db.commit()
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Ledger Transaction Failed: {str(e)}")
+        intent.status = IntentStatus.FAILED
+        db.add(intent)
+        db.commit()
+        api_error(500, "LEDGER_TXN_FAILED", "Ledger transaction failed.", reason=str(e))
         
     return {
         "message": "Transaction Successful",
-        "transaction_id": txn.id,
+        "transaction_id": result.transaction.id,
         "amount_inr": intent.amount_paise / 100
     }
