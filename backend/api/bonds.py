@@ -11,6 +11,7 @@ from models.ledger import LedgerAccount, AccountType, Transaction, TransactionSt
 from api.deps import get_current_user
 from api.payments import get_wallet, calculate_balance
 from core.http import api_error
+from core.transaction_types import TransactionTypes
 
 router = APIRouter()
 
@@ -114,6 +115,8 @@ def buy_bond(payload: BuyRequest, db: Session = Depends(get_db), current_user: U
         txn = Transaction(
             user_id=current_user.id,
             description=f"Automated Allocation to {target_bond.name}",
+            transaction_type=TransactionTypes.BOND_PURCHASE,
+            transaction_metadata=json.dumps({"bond_id": target_bond.id, "amount_paise": payload.amount_paise}),
             ai_category="INVESTMENTS",
             status=TransactionStatus.PENDING
         )
@@ -163,6 +166,8 @@ def buy_bond(payload: BuyRequest, db: Session = Depends(get_db), current_user: U
         failed_txn = Transaction(
             user_id=current_user.id,
             description=f"Automated Allocation to {target_bond.name}",
+            transaction_type=TransactionTypes.BOND_PURCHASE,
+            transaction_metadata=json.dumps({"bond_id": target_bond.id, "amount_paise": payload.amount_paise}),
             ai_category="INVESTMENTS",
             status=TransactionStatus.FAILED
         )
@@ -219,6 +224,10 @@ def transfer_bond_holding(
             user_id=current_user.id,
             idempotency_key=payload.idempotency_key,
             description=f"Bond Transfer to {recipient_num}",
+            transaction_type=TransactionTypes.BOND_TRANSFER,
+            transaction_metadata=json.dumps(
+                {"holding_id": holding.id, "recipient_mobile": recipient_num, "amount_paise": holding.principal_paise}
+            ),
             ai_category="BOND_TRANSFER",
             status=TransactionStatus.PENDING
         )
@@ -328,6 +337,10 @@ def redeem_bond_holding(
             user_id=current_user.id,
             idempotency_key=payload.idempotency_key,
             description=f"Bond Redemption from {bond.name}",
+            transaction_type=TransactionTypes.BOND_REDEMPTION,
+            transaction_metadata=json.dumps(
+                {"holding_id": holding.id, "bond_id": bond.id, "principal_paise": holding.principal_paise}
+            ),
             ai_category="BOND_REDEMPTION",
             status=TransactionStatus.PENDING
         )
@@ -442,6 +455,10 @@ def settle_matured_holdings(
             txn = Transaction(
                 user_id=current_user.id,
                 description=f"Maturity Settlement for {bond.name}",
+                transaction_type=TransactionTypes.BOND_MATURITY_SETTLEMENT,
+                transaction_metadata=json.dumps(
+                    {"holding_id": holding.id, "bond_id": bond.id, "principal_paise": holding.principal_paise}
+                ),
                 ai_category="BOND_MATURITY_SETTLEMENT",
                 status=TransactionStatus.PENDING
             )

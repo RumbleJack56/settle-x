@@ -37,6 +37,8 @@ class Transaction(Base):
     idempotency_key = Column(String, unique=True, index=True, nullable=True)
     reference_number = Column(String, index=True, nullable=True) # e.g. External UTR
     description = Column(String, nullable=False)
+    transaction_type = Column(String, index=True, nullable=False, default="GENERIC")
+    transaction_metadata = Column(String, nullable=True) # JSON string
     ai_category = Column(String, nullable=True)
     status = Column(Enum(TransactionStatus), default=TransactionStatus.PENDING)
     posted_date = Column(DateTime, default=datetime.utcnow)

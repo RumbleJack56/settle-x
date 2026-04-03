@@ -1,13 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { History, Share, ArrowDownLeft, ArrowUpRight, Loader2, Landmark } from "lucide-react";
+import { History, ArrowDownLeft, ArrowUpRight, Loader2, Landmark } from "lucide-react";
 import Link from "next/link";
+import { formatTransactionType, type TransactionRecord } from "@/lib/transactionTypes";
 
 export default function HistoryPage() {
     const { data: session, status } = useSession();
-    const [txs, setTxs] = useState<any[]>([]);
+    const [txs, setTxs] = useState<TransactionRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [typeFilter, setTypeFilter] = useState("ALL");
 
     const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000/api/v1";
 
@@ -22,6 +24,11 @@ export default function HistoryPage() {
     }, [status, session]);
 
     if (status === "loading" || loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-[#00baf2]" size={40}/></div>;
+
+    const availableTypes = Array.from(new Set(txs.map(tx => tx.transaction_type || "GENERIC")));
+    const visibleTxs = typeFilter === "ALL"
+      ? txs
+      : txs.filter(tx => (tx.transaction_type || "GENERIC") === typeFilter);
 
     return (
         <div className="max-w-4xl mx-auto py-12 px-4 sm:px-6">
@@ -38,16 +45,32 @@ export default function HistoryPage() {
                 </Link>
             </div>
 
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2">Filter by Transaction Type</label>
+                <select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    className="w-full sm:w-80 border border-gray-300 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-800 focus:ring-2 focus:ring-[#00baf2] outline-none"
+                >
+                    <option value="ALL">All Types</option>
+                    {availableTypes.map((type) => (
+                        <option key={type} value={type}>
+                            {formatTransactionType(type)}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                {txs.length === 0 ? (
+                {visibleTxs.length === 0 ? (
                     <div className="p-12 text-center text-gray-400 font-bold border-gray-100">No transaction records found inside the ledger.</div>
                 ) : (
                     <div>
-                        {txs.map((tx, i) => {
+                        {visibleTxs.map((tx, i) => {
                             // In Double Entry (ASSET wallet), DEBIT = Money Increased/Received. CREDIT = Money Decreased/Sent.
                             const isReceived = tx.direction === "DEBIT";
                             return (
-                                <div key={tx.id} className={`flex items-center justify-between p-6 ${i !== txs.length - 1 ? 'border-b border-gray-100' : ''} hover:bg-gray-50 transition-colors`}>
+                                <div key={tx.id} className={`flex items-center justify-between p-6 ${i !== visibleTxs.length - 1 ? 'border-b border-gray-100' : ''} hover:bg-gray-50 transition-colors`}>
                                     <div className="flex items-center gap-5">
                                         <div className={`p-3 rounded-2xl shadow-sm ${isReceived ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                                             {isReceived ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
@@ -58,6 +81,10 @@ export default function HistoryPage() {
                                                 <span>{new Date(tx.date).toLocaleString()}</span>
                                                 <span>•</span>
                                                 <span className={`px-2 py-0.5 rounded ${tx.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{tx.status}</span>
+                                                <span>•</span>
+                                                <span className="px-2 py-0.5 rounded bg-blue-50 text-[#007aa3]">
+                                                    {formatTransactionType(tx.transaction_type || "GENERIC")}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>

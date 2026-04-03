@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database.session import engine, Base
+from database.migrations import ensure_sqlite_legacy_columns
 from core.config import settings
 
 from api.auth import router as auth_router
@@ -14,6 +15,7 @@ from models import *
 
 # Initialize database tables locally (sqlite)
 Base.metadata.create_all(bind=engine)
+ensure_sqlite_legacy_columns(engine)
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
